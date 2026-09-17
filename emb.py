@@ -1,6 +1,8 @@
 import os
 import json
 import torch
+import asyncio
+import aiohttp
 import numpy as np
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
@@ -71,22 +73,60 @@ class EmbeddingModelSBERT():
 class EmbeddingModelAPI():
     def __init__(self):
         self.model = os.getenv('API_EMBEDDER_MODEL_NAME')
-        base_url = os.getenv('API_EMBEDDER_BASE_URL')
-        api_key = os.getenv('API_EMBEDDER_API_KEY')
+        self.base_url = os.getenv('API_EMBEDDER_BASE_URL')
+        self.api_key = os.getenv('API_EMBEDDER_API_KEY')
 
         if not self.model:
             raise ValueError("API_EMBEDDER_MODEL_NAME not set in .env file")
-        if not base_url:
+        if not self.base_url:
             raise ValueError("API_EMBEDDER_BASE_URL not set in .env file")
-        if not api_key:
+        if not self.api_key:
             raise ValueError("API_EMBEDDER_API_KEY not set in .env file")
 
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+
+    async def get_embeddings_async(self, session, semaphore, batch):
+        """Async function to get embeddings for a batch with concurrency control"""
+        async with semaphore:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            retry = 0
+            while retry < 10:
+                try:
+                    async with session.post(
+                        url=f"{self.base_url}/embeddings",
+                        json={
+                            "model": self.model,
+                            "input": batch
+                        },
+                        headers=headers
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            batch_embeddings = [np.array(item['embedding']) for item in result['data']]
+                            return batch_embeddings
+                        else:
+                            error_text = await response.text()
+                            print(f"API Error {response.status}: {error_text}")
+                            retry += 1
+                            if retry < 10:
+                                await asyncio.sleep(1)
+                except Exception as e:
+                    retry += 1
+                    if retry < 10:
+                        await asyncio.sleep(1)
+                        print(f"Error: {e}, retry {retry}/10")
+                    else:
+                        print(f"Failed after 10 retries: {e}")
+                        raise
 
     def get_emb_contriever(self, expansion_ids, expansion):
+        """Synchronous wrapper for backward compatibility"""
         all_docs_vectors = []
 
-        # Process in batches to handle API rate limits
         batch_size = 64
         for i in tqdm(range(0, len(expansion), batch_size)):
             batch = expansion[i:i + batch_size]
@@ -96,8 +136,6 @@ class EmbeddingModelAPI():
                     model=self.model,
                     input=batch
                 )
-
-                # Extract embeddings from response
                 batch_embeddings = [np.array(item.embedding) for item in response.data]
                 all_docs_vectors.extend(batch_embeddings)
 
@@ -114,7 +152,8 @@ class EmbeddingModelAPI():
             return all_docs_vectors
 
 
-def emb_rawdata(dataset, retriever):
+async def emb_rawdata_async(dataset, retriever, max_concurrent=32):
+    """Async version with global 32-way parallelism for API calls"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     emb_dir = os.path.join(script_dir, 'logs/process_embs')
     os.makedirs(emb_dir, exist_ok=True)
@@ -128,30 +167,99 @@ def emb_rawdata(dataset, retriever):
         emb_model = EmbeddingModelSBERT(retriever)
     elif retriever == 'api':
         emb_model = EmbeddingModelAPI()
+    else:
+        raise ValueError(f"Unknown retriever: {retriever}")
 
-    all_emb = []
-    for conversation in tqdm(in_data):
+    # For non-API models, use synchronous path
+    if retriever != 'api':
+        all_emb = []
+        for conversation in tqdm(in_data):
+            questions = [qa_item["question"] for qa_item in conversation["qa"]]
+            sessions = ['\n'.join(session) for session in conversation["sessions"]]
+            turns = [turn for session in conversation["sessions"] for turn in session]
+
+            q_embs = emb_model.get_emb_contriever(None, questions)
+            s_embs = emb_model.get_emb_contriever(None, sessions)
+            t_embs = emb_model.get_emb_contriever(None, turns)
+
+            embform = {
+                "conversation_id": conversation['conversation_id'],
+                "questions": q_embs,
+                "sessions": s_embs,
+                "turns": t_embs,
+            }
+            all_emb.append(embform)
+
+        torch.save(all_emb, save_path)
+        return all_emb
+
+    # API model: use async with global concurrency control
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    # Prepare all batches from all conversations
+    batch_size = 64
+    tasks = []
+    batch_metadata = []  # Track which conversation and type each batch belongs to
+
+    for conv_idx, conversation in enumerate(in_data):
         questions = [qa_item["question"] for qa_item in conversation["qa"]]
         sessions = ['\n'.join(session) for session in conversation["sessions"]]
         turns = [turn for session in conversation["sessions"] for turn in session]
-        for sessid in conversation["sessions_ids"]:
-            id = sessid if 'longmemeval' in dataset else f"convid-{str(conversation['conversation_id'])}-sessid-{sessid}"
 
-        q_embs = emb_model.get_emb_contriever(None, questions)
-        s_embs = emb_model.get_emb_contriever(None, sessions)
-        t_embs = emb_model.get_emb_contriever(None, turns)
-        
+        # Split each into batches and create tasks
+        for text_list, text_type in [(questions, 'questions'), (sessions, 'sessions'), (turns, 'turns')]:
+            for i in range(0, len(text_list), batch_size):
+                batch = text_list[i:i + batch_size]
+                batch_metadata.append({
+                    'conv_idx': conv_idx,
+                    'type': text_type,
+                    'start_idx': i,
+                    'batch': batch
+                })
+
+    print(f"Total batches to process: {len(batch_metadata)}")
+
+    # Execute all batches concurrently with global limit of 32
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            emb_model.get_embeddings_async(session, semaphore, meta['batch'])
+            for meta in batch_metadata
+        ]
+
+        # Show progress while gathering
+        print("Processing batches with 32-way parallelism...")
+        results = await asyncio.gather(*tasks)
+
+    # Reconstruct embeddings per conversation
+    all_emb = [None] * len(in_data)
+    conv_embeddings = {i: {'questions': [], 'sessions': [], 'turns': []} for i in range(len(in_data))}
+
+    for meta, result in zip(batch_metadata, results):
+        conv_idx = meta['conv_idx']
+        text_type = meta['type']
+        conv_embeddings[conv_idx][text_type].extend(result)
+
+    # Convert to tensors and create final structure
+    for conv_idx, conversation in enumerate(in_data):
+        q_embs = torch.tensor(np.array(conv_embeddings[conv_idx]['questions']))
+        s_embs = torch.tensor(np.array(conv_embeddings[conv_idx]['sessions']))
+        t_embs = torch.tensor(np.array(conv_embeddings[conv_idx]['turns']))
+
         embform = {
             "conversation_id": conversation['conversation_id'],
             "questions": q_embs,
             "sessions": s_embs,
             "turns": t_embs,
         }
-        all_emb.append(embform)
+        all_emb[conv_idx] = embform
 
     torch.save(all_emb, save_path)
-    
     return all_emb
+
+
+def emb_rawdata(dataset, retriever):
+    """Synchronous wrapper that calls async version"""
+    return asyncio.run(emb_rawdata_async(dataset, retriever, max_concurrent=32))
 
 
 if __name__ == '__main__':

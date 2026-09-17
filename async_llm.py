@@ -27,8 +27,8 @@ async def create_completion(session, prompt, model="gpt-4o-mini-2024-07-18"):
             ) as response:
                 if response.status == 200:
                     result = await response.json()
-                    print(result['choices'][0]['message']['content'])
-                    print('-----------------------')
+                    # print(result['choices'][0]['message']['content'])
+                    # print('-----------------------')
                     return result['choices'][0]['message']['content']
                 else:
                     error_text = await response.text()

@@ -68,7 +68,7 @@ else:
             async_prompts.append(prompt)
 
     eval_results = []
-    async_responses = asyncio.run(run_async(async_prompts,args.model_name_or_path))
+    async_responses = asyncio.run(run_async(async_prompts,args.model_name_or_path, max_concurrent=64))
     for sample, response in zip(g_results,async_responses):
         sample["llm_judge_single"] = response
         sample.pop("retrieval_results", None)

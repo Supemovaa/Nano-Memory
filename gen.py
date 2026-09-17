@@ -77,7 +77,7 @@ for idx, sample in enumerate(tqdm(retrieved_data)):
     prompt = PROMPT_P.format(fused_event=retrieved_texts, question=sample["question"], question_date=sample["question_date"])
     async_prompts.append(prompt)
 
-async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path))
+async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path, max_concurrent=32))
 async_prompts = []
 
 for idx, sample in enumerate(tqdm(retrieved_data)):
@@ -85,7 +85,7 @@ for idx, sample in enumerate(tqdm(retrieved_data)):
     prompt = PROMPT_G.format(retrieved_texts=filtered_content, question=sample["question"], question_date=sample["question_date"])
     async_prompts.append(prompt)
 
-async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path))
+async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path, max_concurrent=32))
 
 results = []
 for sample, response in zip(retrieved_data, async_responses):
