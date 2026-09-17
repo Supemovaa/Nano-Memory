@@ -1,10 +1,11 @@
 import asyncio
 import aiohttp
+import os
 
 
 async def create_completion(session, prompt, model="gpt-4o-mini-2024-07-18"):
-    API_KEY = 'YOUR_API_KEY'
-    BASE_URL = 'YOUR_API_BASE'
+    API_KEY = os.getenv("OPENAI_API_KEY")
+    BASE_URL = os.getenv("OPENAI_BASE_URL")
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",

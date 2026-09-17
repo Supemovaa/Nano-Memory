@@ -1,0 +1,110 @@
+# =========================
+# 字节码与缓存文件 (Byte-compiled / optimized / DLL files)
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+logs/
+
+# C 扩展库
+*.so
+
+# =========================
+# 分发与打包 (Distribution / packaging)
+# =========================
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller / cx_Freeze
+*.manifest
+*.spec
+
+# =========================
+# 单元测试与覆盖率报告 (Unit test / coverage)
+# =========================
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# =========================
+# 类型检查 (Type checking)
+# =========================
+.mypy_cache/
+.pytype/
+.dmypy.json
+dmypy.json
+
+# =========================
+# 虚拟环境 (Virtual environments)
+# =========================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Pipenv / Poetry
+Pipfile.lock
+# poetry.lock 通常建议提交，但如果不想跟踪可取消注释
+# poetry.lock
+
+# =========================
+# 敏感配置与环境变量 (Environment variables & Secrets)
+# =========================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# =========================
+# Jupyter Notebook 缓存
+# =========================
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# =========================
+# IDE 与编辑器配置 (IDE & Editors)
+# =========================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+
+# macOS / Windows 系统临时文件
+.DS_Store
+Thumbs.db

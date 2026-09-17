@@ -9,7 +9,7 @@ from emb import emb_rawdata
 import multiprocessing as mp
 from functools import partial
 import torch.nn.functional as F
-from eval_utils import evaluate_retrieval
+from evaluation.retrieval.eval_utils import evaluate_retrieval
 from sklearn.preprocessing import normalize
 from transformers import AutoModel, AutoTokenizer
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +38,7 @@ def main(args):
     else:
         all_emb = emb_rawdata(args.dataset, args.retriever)
 
-    in_data = json.load(open(f'../data/process_data/{args.dataset}.json'))
+    in_data = json.load(open(f'data/process_data/{args.dataset}.json'))
 
     conv_turn_embeddings = {}
     for entry, emb in zip(in_data, all_emb):

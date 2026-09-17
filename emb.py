@@ -20,8 +20,8 @@ def read_ids2granularity(path):
 class EmbeddingModelContriever():
 
     def __init__(self):
-        self.model = AutoModel.from_pretrained('facebook/contriever').to(torch.device('cuda', 0))
-        self.tokenizer = AutoTokenizer.from_pretrained('facebook/contriever')
+        self.model = AutoModel.from_pretrained('/home/maty/models/contriever').to(torch.device('cuda', 0))
+        self.tokenizer = AutoTokenizer.from_pretrained('/home/maty/models/contriever')
 
     def get_emb_contriever(self, expansion_ids, expansion):
         def mean_pooling(token_embeddings, mask):
@@ -67,7 +67,7 @@ def emb_rawdata(dataset, retriever):
     emb_dir = os.path.join(script_dir, 'logs/process_embs')
     os.makedirs(emb_dir, exist_ok=True)
     save_path = os.path.join(emb_dir, f'{dataset}-{retriever}-emb.pt')
-    data_path = f'../data/process_data/{dataset}.json'
+    data_path = f'data/process_data/{dataset}.json'
     in_data = json.load(open(data_path))
 
     if retriever == 'contriever':
@@ -101,5 +101,6 @@ def emb_rawdata(dataset, retriever):
 
 
 if __name__ == '__main__':
-    emb_rawdata('longmemeval_m', 'contriever')
+    emb_rawdata('locomo10', 'contriever')
+    # emb_rawdata('longmemeval_m', 'contriever')
     # locomo10, longmemeval_s, LongMTBench+

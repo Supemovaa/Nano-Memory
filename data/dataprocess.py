@@ -116,7 +116,7 @@ def process_longmemeval_m():
         json.dump(alldata, f, ensure_ascii=False, indent=4)
 
 def process_locomo10():
-    in_data = json.load(open('data/unprocess/locomo10.json'))
+    in_data = json.load(open('unprocess/locomo10.json'))
 
     alldata = []
 
@@ -244,6 +244,6 @@ def process_LongMTBench_plus():
 if __name__ == '__main__':
     os.makedirs("./process_data/", exist_ok=True)
     process_locomo10()
-    process_LongMTBench_plus()
-    process_longmemeval_s()
-    process_longmemeval_m()
+    # process_LongMTBench_plus()
+    # process_longmemeval_s()
+    # process_longmemeval_m()

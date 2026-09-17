@@ -39,7 +39,7 @@ retrieval_path = os.path.join(script_dir, f'logs/retrieval_logs/{args.dataset}-{
 with open(retrieval_path, "r", encoding="utf-8") as f:
     for line in f.readlines():
         retrieved_data.append(json.loads(line.strip()))
-data_path = os.path.join(script_dir, f'../data/process_data/{args.dataset}.json')
+data_path = os.path.join(script_dir, f'data/process_data/{args.dataset}.json')
 in_data = json.load(open(data_path, encoding="utf-8"))
 
 conv2sessions = {}
@@ -77,7 +77,7 @@ for idx, sample in enumerate(tqdm(retrieved_data)):
     prompt = PROMPT_P.format(fused_event=retrieved_texts, question=sample["question"], question_date=sample["question_date"])
     async_prompts.append(prompt)
 
-async_responses = asyncio.run(run_async(async_prompts))
+async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path))
 async_prompts = []
 
 for idx, sample in enumerate(tqdm(retrieved_data)):
@@ -85,7 +85,7 @@ for idx, sample in enumerate(tqdm(retrieved_data)):
     prompt = PROMPT_G.format(retrieved_texts=filtered_content, question=sample["question"], question_date=sample["question_date"])
     async_prompts.append(prompt)
 
-async_responses = asyncio.run(run_async(async_prompts))
+async_responses = asyncio.run(run_async(async_prompts, model=args.model_name_or_path))
 
 results = []
 for sample, response in zip(retrieved_data, async_responses):
