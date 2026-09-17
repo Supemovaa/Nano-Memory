@@ -6,6 +6,11 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 from torch.utils.data import DataLoader
 from sentence_transformers import SentenceTransformer
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 def read_ids2granularity(path):
@@ -20,8 +25,9 @@ def read_ids2granularity(path):
 class EmbeddingModelContriever():
 
     def __init__(self):
-        self.model = AutoModel.from_pretrained('/home/maty/models/contriever').to(torch.device('cuda', 0))
-        self.tokenizer = AutoTokenizer.from_pretrained('/home/maty/models/contriever')
+        contriever_path = os.getenv('CONTRIEVER_PATH', "")
+        self.model = AutoModel.from_pretrained(contriever_path).to(torch.device('cuda', 0))
+        self.tokenizer = AutoTokenizer.from_pretrained(contriever_path)
 
     def get_emb_contriever(self, expansion_ids, expansion):
         def mean_pooling(token_embeddings, mask):
@@ -52,7 +58,7 @@ class EmbeddingModelSBERT():
             self.model = SentenceTransformer('sentence-transformers/multi-qa-mpnet-base-cos-v1')
         elif retriever == 'minilm':
             self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-            
+
     def get_emb_contriever(self, expansion_ids, expansion):
         all_docs_vectors = self.model.encode(expansion)
         if expansion_ids:
@@ -60,6 +66,52 @@ class EmbeddingModelSBERT():
             return ids2emb
         else:
             return torch.tensor(all_docs_vectors)
+
+
+class EmbeddingModelAPI():
+    def __init__(self):
+        self.model = os.getenv('API_EMBEDDER_MODEL_NAME')
+        base_url = os.getenv('API_EMBEDDER_BASE_URL')
+        api_key = os.getenv('API_EMBEDDER_API_KEY')
+
+        if not self.model:
+            raise ValueError("API_EMBEDDER_MODEL_NAME not set in .env file")
+        if not base_url:
+            raise ValueError("API_EMBEDDER_BASE_URL not set in .env file")
+        if not api_key:
+            raise ValueError("API_EMBEDDER_API_KEY not set in .env file")
+
+        self.client = OpenAI(base_url=base_url, api_key=api_key)
+
+    def get_emb_contriever(self, expansion_ids, expansion):
+        all_docs_vectors = []
+
+        # Process in batches to handle API rate limits
+        batch_size = 64
+        for i in tqdm(range(0, len(expansion), batch_size)):
+            batch = expansion[i:i + batch_size]
+
+            try:
+                response = self.client.embeddings.create(
+                    model=self.model,
+                    input=batch
+                )
+
+                # Extract embeddings from response
+                batch_embeddings = [np.array(item.embedding) for item in response.data]
+                all_docs_vectors.extend(batch_embeddings)
+
+            except Exception as e:
+                print(f"Error processing batch {i//batch_size}: {e}")
+                raise
+
+        all_docs_vectors = torch.tensor(np.array(all_docs_vectors))
+
+        if expansion_ids:
+            ids2emb = {expansion_ids[i]: all_docs_vectors[i] for i in range(len(expansion_ids))}
+            return ids2emb
+        else:
+            return all_docs_vectors
 
 
 def emb_rawdata(dataset, retriever):
@@ -72,8 +124,10 @@ def emb_rawdata(dataset, retriever):
 
     if retriever == 'contriever':
         emb_model = EmbeddingModelContriever()
-    else:
+    elif retriever in ['mpnet', 'minilm']:
         emb_model = EmbeddingModelSBERT(retriever)
+    elif retriever == 'api':
+        emb_model = EmbeddingModelAPI()
 
     all_emb = []
     for conversation in tqdm(in_data):

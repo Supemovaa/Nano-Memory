@@ -36,6 +36,7 @@ bert_score
 accelerate
 spacy
 llmlingua
+dotenv
 
 
-pip install --force-reinstall -v "openai==1.55.3"
+# pip install --force-reinstall -v "openai==1.55.3"
